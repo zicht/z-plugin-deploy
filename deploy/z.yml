@@ -1,3 +1,5 @@
+# @version ">=2.0"
+
 plugins: ['build']
 
 # Available default tasks. All tasks prefixed with '_' are considered 'private',
@@ -5,10 +7,12 @@ plugins: ['build']
 tasks:
     # Deploys a build
     deploy:
-        set:
+        args:
             target_env: ?
-            build.version: ?vcs.current
+            build.version: ? vcs.current
             _mode: ? "build"
+        opts:
+            tag: ~
         help: |
             Deploys a build to the specified environment
         do:
@@ -19,7 +23,7 @@ tasks:
     simulate:
         help: |
             Simulates a deploy of a build to the specified environment
-        set:
+        args:
             target_env: ?
             build.version: ?vcs.current
             simulate: true
@@ -31,7 +35,7 @@ tasks:
             Do a quick deploy with patch in stead of build+sync
 
             Note build artifacts will not be patched, so only version-controlled files are patched and deployed.
-        set:
+        args:
             target_env: ?
             build.version: ?vcs.current
             _mode: '"patch"'
@@ -41,7 +45,7 @@ tasks:
 
     # Redeploys a build
     redeploy:
-        set:
+        args:
             target_env: ?
             build.version: env.versionat(target_env)
         help: |
@@ -55,26 +59,27 @@ tasks:
 
             This only works for files within the versioning tree, not for external files or build artifacts.
             Patch does not update the installed version.
-        set:
+        args:
             target_env: ?
             build.version: ?vcs.current
-            src.version: env.versionat(envs[target_env].ssh)
-            _simulate: ? "no"
-            _revert: ? "no"
+            src.version: env.versionat(target_env)
             _patchfile: safename(sprintf("%s-%s.patch", src.version, build.version))
+        flags:
+            simulate: false
+            revert: false
         do:
             - ?(verbose) echo "Applying patch for $(src.version) -> $(build.version)"
-            - $(vcs.diff(src.version, build.version, 1)) > $(_patchfile)
+            - $(vcs.diff(src.version, build.version, true)) > $(_patchfile)
             - scp $(_patchfile) $(envs[target_env].ssh):$(envs[target_env].root)/$(_patchfile)
             - |
-                ssh $(envs[target_env].ssh) "                                \
-                    cd $(envs[target_env].root);                             \
-                    patch -r - -p0                              \
-                        $(_simulate == "yes"    ? "--dry-run")  \
-                        $(_revert == "yes"      ? "--reverse")  \
-                        $(verbose               ? "--verbose")  \
-                        < $(_patchfile);                        \
-                    rm $(_patchfile)                            \
+                ssh $(envs[target_env].ssh) "           \
+                    cd $(envs[target_env].root);        \
+                    patch -r - -p0                      \
+                        $(simulate  ? "--dry-run")      \
+                        $(revert    ? "--reverse")      \
+                        $(verbose   ? "--verbose")      \
+                        < $(_patchfile);                \
+                    rm $(_patchfile)                    \
                 "
             - rm $(_patchfile)
 
@@ -82,20 +87,20 @@ tasks:
     qsimulate:
         help: |
             Simulate patching a remote installation
-        set:
+        args:
             target_env: ?
             build.version: ?vcs.current
-            src.version: env.versionat(envs[target_env].ssh)
-            _simulate: '"yes"'
+            src.version: env.versionat(target_env)
+            simulate: true
         do: @patch
 
     # Revert the patch
     unpatch:
         help: |
             Revert a previously applied patch.
-        set:
+        args:
             target_env: ?
             build.version: ?vcs.current
-            src.version: env.versionat(envs[target_env].ssh)
-            _revert: '"yes"'
+            src.version: env.versionat(target_env)
+            revert: true
         do: @patch
