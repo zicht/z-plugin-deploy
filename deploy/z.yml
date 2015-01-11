@@ -16,8 +16,8 @@ tasks:
         help: |
             Deploys a build to the specified environment
         do:
-            - ?(_mode == "build") @_sync.sync
-            - ?(_mode == "patch") @patch
+            - @(if _mode == "build") @_sync.sync
+            - @(if _mode == "patch") @patch
 
     # Simulates a deploy
     simulate:
@@ -68,7 +68,7 @@ tasks:
             simulate: false
             revert: false
         do:
-            - ?(VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"
+            - @(if VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"
             - $(vcs.diff(src.version, build.version, true)) > $(_patchfile)
             - scp $(_patchfile) $(envs[target_env].ssh):$(envs[target_env].root)/$(_patchfile)
             - |
