@@ -2,6 +2,73 @@
 
 plugins: ['build']
 
+# Deployment strategies
+# =====================
+#
+# Classic
+# =======
+#
+#   With the classic strategy an Rsync is done to ~/public_html or whatever path envs[target_env].root is defined to.
+#   All files (changed) currently on the server are overwritten.
+#
+#
+# Symlink deployment strategy
+# ===========================
+#
+#   This strategy builds a release on the server first, when all tasks are completed, the public path will be
+#   symlinked to the current release.
+#
+#   To use this strategy you are required to have the following arguments:
+#        deploymentPath     Where the sync script will store releases/current and shared folders.
+#                           Recommended ~/deployment
+#        publicPath         Where the actual public path is where the webserver points at.
+#                           Typically ~/public_html
+#
+#   Optionally:
+#        shared             A list of folders / files that are shared across releases. Such as web/media.
+#        keep               A integer defining how many release to keep on the server (defaults to 2)
+#
+#
+#   In the end you will end up with the following structure (ideally).
+#
+#       ~/deployment/releases
+#       ~/deployment/current   ---> symlink to current deployed release
+#       ~/deployment/shared
+#       ~/public_html          ---> symlink to ~/deployment/current
+#
+#   On deploy the following steps are taken:
+#
+#       - Check if required folders exists and make sure publicPath is a symlink to 'current'
+#       - Create and sync to a release folder (this is a timestamp YYYYMMDDHMS)
+#       - Relink 'current' to the latest release
+#       - Relink 'publicPath' to 'current'
+#
+#   Example:
+#
+#   Consider the following local z(.yml) config:
+#
+#       deploy:
+#            mode: symlink
+#            deploymentPath: /home/rik/tmpdeploy/deployment
+#            publicPath: /home/rik/tmpdeploy/public_html
+#            shared:
+#                - app/config/config_local.yml
+#                - web/media
+#
+#   Result:
+#
+#       ~/deployment/releases/20160812145925
+#                               ^          /app/config/config_local.yml
+#                               |          /web/media     <--       ^
+#       ~/deployment/current ----  <--                       |      |
+#       ~/deployment/shared          |                       |      |
+#                           /app/config/config_local.yml ----|------|
+#                           /web/media ----------------------|
+#       ~/public_html ---------------|
+#
+#
+
+
 # Available default tasks. All tasks prefixed with '_' are considered 'private',
 # i.e. they are not published in the command line help / list commands.
 tasks:
@@ -11,13 +78,125 @@ tasks:
             target_env: ?
             build.version: ? vcs.current
             _mode: ? "build"
-#        opts:
-#            tag: ~
+            # deployment strategy defaults to "classic"
+            strategy: ? deploy.strategy
+            # Where the deploys are done usually next to /home/user/public_html, so consider: /home/user/deployment
+            deploymentPath: ? deploy.deploymentPath
+            # Automatic naming of the release, use datetime
+            targetPath: ? sh("date +%Y%m%d%H%M%S| awk '{printf $0}'")
+            # The actual folder nginx/apache is using such as /home/user/public_html (use absolute paths)
+            publicPath: ? deploy.publicPath
+            # An array with relative shares, these are defined in /[deploymentPath]/shared/
+            # You can use relative paths. Such as: web/media or app/config/config_local.yml
+            shared: ? deploy.shared
+            # How many releases to keep
+            keep: ? deploy.keep
+            # Defaults to envs[target_env].root
+            install_path: getInstallPath
+
         help: |
             Deploys a build to the specified environment
+        pre:
+            - @(if strategy == "symlink" && _mode == "build") @_symlink_prepare
+            - @(if strategy == "symlink" && _mode == "build") echo "Deploy using Symlink strategy"
+            - @(if strategy == "classic") echo "Deploy using Classic strategy"
         do:
             - @(if _mode == "build") @_sync.sync
             - @(if _mode == "patch") @patch
+
+        post:
+            - @(if strategy == "symlink") @_symlink_deploy
+
+    releases:
+        help: "Show all releases currently on the server. (Symlink strategy only)"
+        args:
+            target_env: ?
+            # deployment strategy defaults to "classic"
+            strategy: ? deploy.strategy
+            # Where the deploys are done usually next to /home/user/public_html, so consider: /home/user/deployment
+            deploymentPath: ? deploy.deploymentPath
+        do:
+            - @(if strategy != "symlink") echo "You are not using the symlink strategy, can not show releases"
+            - |
+                @(if strategy == "symlink")
+                    @(sh ssh(target_env))
+                        CURRENT=`readlink $(deploymentPath)/current | awk '{ printf $0 }' | awk -F "releases/" '{printf $NF}' | sed 's/\///'`;
+                        ls $(deploymentPath)/releases | sed "s/$CURRENT/$CURRENT */"
+
+    rollback:
+        help: "Rollback to a release. (Symlink strategy only)"
+        args:
+            target_env: ?
+            release: ?
+            # deployment strategy defaults to "classic"
+            strategy: ? deploy.strategy
+            # Where the deploys are done usually next to /home/user/public_html, so consider: /home/user/deployment
+            deploymentPath: ? deploy.deploymentPath
+        do:
+            - @(if strategy != "symlink") echo "You are not using the symlink strategy, can not show releases"
+            - |
+                @(if strategy == "symlink")
+                    @(sh ssh(target_env))
+                        if [ -e $(deploymentPath)/releases/$(release) ];
+                        then
+                            echo "Rolling back to $(release)";
+                            rm -Rf $(deploymentPath)/current;
+                            ln -s $(deploymentPath)/releases/$(release)/ $(deploymentPath)/current
+                            echo "$(release) is now the current release"
+                        else
+                            echo "Release does not exists, can not rollback";
+                        fi
+
+    # Symlink deployment strategy: Switch current and cleanup.
+    # ========================================================
+    #
+    #   - Set the 'current' release to the deployed targetPath
+    #   - Make sure all shares are available to the current release
+    #   - Cleanup old releases based on 'keep'
+    #
+    _symlink_deploy:
+        do:
+            # Remove old current link, using ln -sf didn't seem to work
+            - @(sh ssh(target_env)) if [ -e "$(deploymentPath)/current" ]; then rm -Rf $(deploymentPath)/current ; fi
+
+            # Make sure 'current' in the deploymentPath is set to the latest version
+            - @(sh ssh(target_env)) ln -s $(deploymentPath)/releases/$(targetPath)/ $(deploymentPath)/current
+
+            # Make all shared files/folders available
+            - |
+                @(for share in shared)
+                    if [ -d "$(deploymentPath)/current/$(share)" ]; then rm -Rf $(deploymentPath)/current/$(share); fi
+                    ln -s $(deploymentPath)/shared/$(share) $(deploymentPath)/current/$(share)
+
+            # Removing other releases if keep is met.
+            - |
+                @(sh ssh(target_env))
+                cd $(deploymentPath)/releases;
+                RELEASECOUNT=`ls | sort -r | awk 'NR>1 {print $1}' | wc -l`;
+                if [ $RELEASECOUNT -ge $(keep) ]; then ls | sort -nr | awk 'NR>$(keep)' | xargs rm -rf; fi
+
+
+    # Symlink deployment strategy: Prepare deployment structure.
+    # ==========================================================
+    #
+    # Build required directory structure, based on the deploymentPath
+    #
+    #       ~/[deploymentPath]/releases
+    #       ~/[deploymentPath]/current   ---> symlink to current deployed release
+    #       ~/[deploymentPath]/shared
+    #       ~/[publicPath]               ---> symlink to ~/deployment/current
+    #
+    _symlink_prepare:
+        do:
+            # Make sure releases path exists
+            - |
+                @(sh ssh(target_env))
+                if [ ! -d "$(deploymentPath)/releases" ]; then mkdir $(deploymentPath)/releases ; fi;
+                if [ ! -d "$(deploymentPath)/current" ]; then mkdir $(deploymentPath)/current ; fi;
+                if [ ! -d "$(deploymentPath)/shared" ]; then mkdir $(deploymentPath)/shared ; fi;
+                if [ ! -e "$(publicPath)" ]; then ln -s $(deploymentPath)/current $(publicPath); fi;
+            # Create and sync to the targetPath
+            - @(sh ssh(target_env)) if [ ! -e "$(deploymentPath)/releases/$(targetPath)" ]; then mkdir $(deploymentPath)/releases/$(targetPath) ;  fi
 
     # Simulates a deploy
     simulate:
