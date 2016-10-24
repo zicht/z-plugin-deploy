@@ -1,106 +1,58 @@
-# @version ">=2.0"
-
 plugins: ['build']
 
-# Available default tasks. All tasks prefixed with '_' are considered 'private',
-# i.e. they are not published in the command line help / list commands.
 tasks:
-    # Deploys a build
     deploy:
+        help: |
+            Deploy a build to the specified target environment
+
+            Creates a new build from the current (or specified) version, and deploys the build to the remote
+            environment. Several options are available to speed up and/or customize the deploy action.
+
+            Example usages:
+
+                z deploy --simulate production 1.0.0 --exclude=/vendor
+
+            --simulate: Simulate the build, default is false
+            --clean: Clean the build before rebuilding
+            --tag=TAG: create a tag after successful deploy
+            --dir=DIR: Only deploy the specified directory. Use with care.
+            --from=FROM: The source directory to sync from. This is used as the build dir, for example a working tree. Use with extreme caution!
+            --exclude=EXCLUDE: additional exclusion parameter for the sync (e.g. "/vendor")
         args:
             target_env: ?
-            build.version: ? vcs.current
-            _mode: ? "build"
-#        opts:
-#            tag: ~
-        help: |
-            Deploys a build to the specified environment
+            version: ? vcs.current
+        flags:
+            simulate: false
+            clean: false
+        opts:
+            tag: '""'
+            dir: '""'
+            from: tasks._create_build
+            exclude[]: '[]'
+        set:
+            target: sprintf("%s:%s", envs[target_env].ssh, envs[target_env].root)
         do:
-            - @(if _mode == "build") @_sync.sync
-            - @(if _mode == "patch") @patch
+            - @_sync.sync
+        post:
+            - @(if tag) git tag --annotate $(tag) $(version)
 
-    # Simulates a deploy
     simulate:
         help: |
-            Simulates a deploy of a build to the specified environment
+            Simulate a deploy (BC task)
+
+            This task calls the `deploy --simulate` for BC
         args:
             target_env: ?
-            build.version: ?vcs.current
-            simulate: true
-        do: @_sync.simulate
-
-    # Do a quick deploy based on a patch file rather than build and sync.
-    qdeploy:
-        help: |
-            Do a quick deploy with patch in stead of build+sync
-
-            Note build artifacts will not be patched, so only version-controlled files are patched and deployed.
-        args:
-            target_env: ?
-            build.version: ?vcs.current
-            _mode: '"patch"'
+        set:
+            continue: confirm(sprintf("The simulate command is deprecated. Please use 'z deploy --simulate %s'. Continue anyway?", target_env))
         do:
-            - @deploy
-            - echo "Remember to do a full deploy to avoid future version mismatches!"
+            - @(if continue) $(z.cmd) deploy --simulate $(target_env);
+
 
     # Redeploys a build
     redeploy:
         args:
             target_env: ?
-            build.version: env.versionat(target_env)
         help: |
             Redeploys the version that is installed on the specified environment.
-        do: @deploy
-
-    # Generate a patch for the difference between local a
-    patch:
-        help: |
-            Quickly apply a patch to a remote installation without doing an entire sync.
-
-            This only works for files within the versioning tree, not for external files or build artifacts.
-            Patch does not update the installed version.
-        args:
-            target_env: ?
-            build.version: ?vcs.current
-            src.version: env.versionat(target_env)
-            _patchfile: safename(sprintf("%s-%s.patch", src.version, build.version))
-        flags:
-            simulate: false
-            revert: false
-        do:
-            - @(if VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"
-            - $(vcs.diff(src.version, build.version, true)) > $(_patchfile)
-            - scp $(_patchfile) $(envs[target_env].ssh):$(envs[target_env].root)/$(_patchfile)
-            - |
-                ssh $(envs[target_env].ssh) "           \
-                    cd $(envs[target_env].root);        \
-                    patch -r - -p0                      \
-                        $(simulate  ? "--dry-run")      \
-                        $(revert    ? "--reverse")      \
-                        $(VERBOSE   ? "--verbose")      \
-                        < $(_patchfile);                \
-                    rm $(_patchfile)                    \
-                "
-            - rm $(_patchfile)
-
-    # Simulate applying a patch.
-    qsimulate:
-        help: |
-            Simulate patching a remote installation
-        args:
-            target_env: ?
-            build.version: ?vcs.current
-            src.version: env.versionat(target_env)
-            simulate: true
-        do: @patch
-
-    # Revert the patch
-    unpatch:
-        help: |
-            Revert a previously applied patch.
-        args:
-            target_env: ?
-            build.version: ?vcs.current
-            src.version: env.versionat(target_env)
-            revert: true
-        do: @patch
+        do: $(z.cmd) deploy $(target_env) $(env.versionat(target_env))

@@ -9,6 +9,6 @@
         }
     ],
     "require": {
-
+        "zicht/z-plugin-build": "*"
     }
 }
