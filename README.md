@@ -125,4 +125,4 @@ Z try to do. To get even more information, you can combine `--explain` and
   projects, you should consider creating plugins.
 
 # Maintainer(s)
-* Gerard van Helden <gerard@zicht.nl>
+* Oskar van Velden <oskar@zicht.nl>
