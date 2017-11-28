@@ -124,5 +124,6 @@ Z try to do. To get even more information, you can combine `--explain` and
 * As soon as you find you are copying-and-pasting your z.yml files across
   projects, you should consider creating plugins.
 
-# Maintainer(s)
-* Oskar van Velden <oskar@zicht.nl>
+# Maintainers
+* Philip Bergman <philip@zicht.nl>
+* Michael Roterman <michael@zicht.nl>
