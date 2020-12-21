@@ -16,6 +16,7 @@ tasks:
         help: |
             Deploys a build to the specified environment
         do:
+            - @(if envs[target_env] == null) echo "Unable to deploy.  Unknown target_env \"$(target_env)\"" && exit 1
             - @(if _mode == "build") @_sync.sync
             - @(if _mode == "patch") @patch
 
@@ -27,7 +28,9 @@ tasks:
             target_env: ?
             build.version: ?vcs.current
             simulate: true
-        do: @_sync.simulate
+        do:
+            - @(if envs[target_env] == null) echo "Unable to simulate.  Unknown target_env \"$(target_env)\"" && exit 1
+            - @_sync.simulate
 
     # Do a quick deploy based on a patch file rather than build and sync.
     qdeploy:
@@ -40,6 +43,7 @@ tasks:
             build.version: ?vcs.current
             _mode: '"patch"'
         do:
+            - @(if envs[target_env] == null) echo "Unable to qdeploy.  Unknown target_env \"$(target_env)\"" && exit 1
             - @deploy
             - echo "Remember to do a full deploy to avoid future version mismatches!"
 
@@ -50,7 +54,9 @@ tasks:
             build.version: env.versionat(target_env)
         help: |
             Redeploys the version that is installed on the specified environment.
-        do: @deploy
+        do:
+            - @(if envs[target_env] == null) echo "Unable to redeploy.  Unknown target_env \"$(target_env)\"" && exit
+            - @deploy
 
     # Generate a patch for the difference between local a
     patch:
@@ -68,6 +74,7 @@ tasks:
             simulate: false
             revert: false
         do:
+            - @(if envs[target_env] == null) echo "Unable to patch.  Unknown target_env \"$(target_env)\"" && exit
             - @(if VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"
             - $(vcs.diff(src.version, build.version, true)) > $(_patchfile)
             - scp $(_patchfile) $(envs[target_env].ssh):$(envs[target_env].root)/$(_patchfile)
@@ -92,7 +99,9 @@ tasks:
             build.version: ?vcs.current
             src.version: env.versionat(target_env)
             simulate: true
-        do: @patch
+        do:
+            - @(if envs[target_env] == null) echo "Unable to qsimulate.  Unknown target_env \"$(target_env)\"" && exit
+            - @patch
 
     # Revert the patch
     unpatch:
@@ -103,4 +112,6 @@ tasks:
             build.version: ?vcs.current
             src.version: env.versionat(target_env)
             revert: true
-        do: @patch
+        do:
+            - @(if envs[target_env] == null) echo "Unable to unpatch.  Unknown target_env \"$(target_env)\"" && exit
+            - @patch
