@@ -16,17 +16,17 @@ tasks:
         help: |
             Deploys a build to the specified environment
         do:
-            - @(if _mode == "build") @_deploy
-            - @(if _mode == "patch") @patch
+            - '@(if _mode == "build") @_deploy'
+            - '@(if _mode == "patch") @patch'
         done:
-            - @(if _mode == "build") $(block(sprintf("Deployed %s to %s\nCheck %s", vcs.description, target_env, envs[target_env].url), "fg=white;bg=green;options=bold"))
+            - '@(if _mode == "build") $(block(sprintf("Deployed %s to %s\nCheck %s", vcs.description, target_env, envs[target_env].url), "fg=white;bg=green;options=bold"))'
 
     _deploy:
         do:
-            - @check
-            - @build
+            - '@check'
+            - '@build'
             - $(block(sprintf("Deploying %s to %s...", vcs.description, target_env), "fg=white;bg=cyan;options=bold"))
-            - @_sync.sync
+            - '@_sync.sync'
 
     check:
         help: |
@@ -38,13 +38,13 @@ tasks:
             build.version: ? vcs.current
         pre:
             - $(block("Checking...", "fg=white;bg=cyan;options=bold"))
-            - @(if envs[target_env] == null && simulate) $(block(sprintf("Unable to simulate. Unknown target_env \"%s\". Try one of %s", target_env, join(", ", keys(envs))), "fg=white;bg=red;options=bold"))
-            - @(if envs[target_env] == null && !simulate) $(block(sprintf("Unable to deploy. Unknown target_env \"%s\". Try one of %s", target_env, join(", ", keys(envs))), "fg=white;bg=red;options=bold"))
-            - @(if envs[target_env] == null) exit 1
+            - '@(if envs[target_env] == null && simulate) $(block(sprintf("Unable to simulate. Unknown target_env \"%s\". Try one of %s", target_env, join(", ", keys(envs))), "fg=white;bg=red;options=bold"))'
+            - '@(if envs[target_env] == null && !simulate) $(block(sprintf("Unable to deploy. Unknown target_env \"%s\". Try one of %s", target_env, join(", ", keys(envs))), "fg=white;bg=red;options=bold"))'
+            - '@(if envs[target_env] == null) exit 1'
             - echo -e "\n <info>Have a look at our best practices https://github.com/zicht/decorum/tree/master/process/deployment</info>\n"
         do:
             - echo -e "\n <comment>Checking remote status with 'z vcs.remote.status'. No currently released branches with 'Ahead' > 0 ?</comment>\n"
-            - @vcs.remote.status
+            - '@vcs.remote.status'
             - |
                 REMOTE_VERSION="$(env.versionat(target_env))"
                 CONTAINS=`git log -q --pretty=format:"%H" "$(build.version)" | grep "$REMOTE_VERSION" || echo ""`
@@ -69,10 +69,10 @@ tasks:
             build.version: ?vcs.current
             simulate: true
         do:
-            - @check
-            - @build
+            - '@check'
+            - '@build'
             - $(block(sprintf("Simulating deploy of %s...", vcs.description), "fg=white;bg=cyan;options=bold"))
-            - @_sync.simulate
+            - '@_sync.simulate'
             - $(block(sprintf("Simulated deploy of %s to %s", vcs.description, target_env), "fg=white;bg=green;options=bold"))
 
     # Do a quick deploy based on a patch file rather than build and sync.
@@ -86,8 +86,8 @@ tasks:
             build.version: ?vcs.current
             _mode: '"patch"'
         do:
-            - @(if envs[target_env] == null) echo "Unable to qdeploy. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1
-            - @deploy
+            - '@(if envs[target_env] == null) echo "Unable to qdeploy. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1'
+            - '@deploy'
             - echo "Remember to do a full deploy to avoid future version mismatches!"
 
     # Redeploys a build
@@ -98,8 +98,8 @@ tasks:
         help: |
             Redeploys the version that is installed on the specified environment.
         do:
-            - @(if envs[target_env] == null) echo "Unable to redeploy. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1
-            - @deploy
+            - '@(if envs[target_env] == null) echo "Unable to redeploy. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1'
+            - '@deploy'
 
     # Generate a patch for the difference between local a
     patch:
@@ -117,8 +117,8 @@ tasks:
             simulate: false
             revert: false
         do:
-            - @(if envs[target_env] == null) echo "Unable to patch. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1
-            - @(if VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"
+            - '@(if envs[target_env] == null) echo "Unable to patch. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1'
+            - '@(if VERBOSE) echo "Applying patch for $(src.version) -> $(build.version)"'
             - $(vcs.diff(src.version, build.version, true)) > $(_patchfile)
             - scp $(_patchfile) $(envs[target_env].ssh):$(envs[target_env].root)/$(_patchfile)
             - |
@@ -143,8 +143,8 @@ tasks:
             src.version: env.versionat(target_env)
             simulate: true
         do:
-            - @(if envs[target_env] == null) echo "Unable to qsimulate. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1
-            - @patch
+            - '@(if envs[target_env] == null) echo "Unable to qsimulate. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1'
+            - '@patch'
 
     # Revert the patch
     unpatch:
@@ -156,5 +156,5 @@ tasks:
             src.version: env.versionat(target_env)
             revert: true
         do:
-            - @(if envs[target_env] == null) echo "Unable to unpatch. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1
-            - @patch
+            - '@(if envs[target_env] == null) echo "Unable to unpatch. Unknown target_env \"$(target_env)\". Try one of $(join(", ", keys(envs)))" && exit 1'
+            - '@patch'
