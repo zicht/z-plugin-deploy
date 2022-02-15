@@ -43,6 +43,7 @@ tasks:
             - '@(if envs[target_env] == null && !simulate) $(block(sprintf("Unable to deploy. Unknown target_env \"%s\". Try one of %s", target_env, join(", ", keys(envs))), "fg=white;bg=red;options=bold"))'
             - '@(if envs[target_env] == null) exit 1'
         do:
+            - '@(if !ssh.connectable(envs[target_env].ssh, envs[target_env].ssh_port)) $(block(sprintf("WARNING: SSH check failed.\nCould not connect to %s on port %d. Is your public IP address %s allowed to connect? Should you enable VPN?", envs[target_env].ssh, envs[target_env].ssh_port, public_ip()), "fg=black;bg=yellow"))'
             - echo -e "\n <comment>Checking remote status with 'z vcs.remote.status'. No currently released branches with 'Ahead' > 0 ?</comment>\n"
             - '@vcs.remote.status'
             - |

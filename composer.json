@@ -9,7 +9,8 @@
         }
     ],
     "require": {
-        "zicht/z": ">=2.1"
+        "zicht/z": ">=2.1.1",
+        "zicht/z-plugin-env": ">=2.0.0"
     },
     "conflict": {
         "zicht/z-plugin-build": "<=1.1.2"
